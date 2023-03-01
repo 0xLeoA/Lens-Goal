@@ -152,7 +152,7 @@ contract LensGoal is LensGoalHelpers {
         bool inEther,
         uint256 tokenAmount,
         address tokenAddress,
-        // index identifies which goal the stake is for
+        // identifies which goal the stake is for
         uint256 goalId
     ) external payable {
         require(goalId <= goals.length - 1, "non existing index");

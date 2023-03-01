@@ -9,6 +9,11 @@
 // $$$$$$$$\\$$$$$$$\ $$ |  $$ |$$$$$$$  |      \$$$$$$  |\$$$$$$  |\$$$$$$$ |$$ |
 // \________|\_______|\__|  \__|\_______/        \______/  \______/  \_______|\__|
 
+// Team Lens Handles:
+// cryptocomical.lens       | Designer
+// (Add Greg's name here)   | Front-End and Smart Contract developer
+// leoawolanski.lens        | Smart Contract Developer
+
 pragma solidity 0.8.17;
 
 import "./LensGoalHelpers.sol";

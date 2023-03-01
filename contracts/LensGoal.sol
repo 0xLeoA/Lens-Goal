@@ -35,7 +35,7 @@ contract LensGoal is LensGoalHelpers {
     }
 
     // GoalStatus enum, used to check goal status (e.g. "pending", "true", "false")
-    enum GoalStatus {
+    enum Status {
         PENDING,
         VOTED_TRUE,
         VOTED_FALSE
@@ -54,30 +54,42 @@ contract LensGoal is LensGoalHelpers {
         address tokenAddress;
     }
 
-    struct Goal {
+    struct GoalBasicInfo {
+        address user;
         string description;
         string verificationCriteria;
+        uint256 deadline;
+        Status status;
+        uint256 goalId;
+    }
+
+    struct Goal {
+        GoalBasicInfo info;
         Stake stake;
         Votes votes;
-        GoalStatus status;
-        uint256 goalId;
         AdditionalStake[] additionalstakes;
-        address user;
-        uint256 end;
+        string[] proofs;
     }
 
     struct AdditionalStake {
         Stake stake;
         uint256 stakeId;
+        // which goal this stake belongs to
         uint256 goalId;
         address staker;
+        // used for withdrawStake()
+        // if withdraw == true, stake cannot be withdrawn
+        bool withdrawn;
     }
 
+    // get address's stake and goal ids
     mapping(address => uint256[]) public userToGoalIds;
     mapping(address => uint256[]) public userToStakeIds;
+    // each id is a goal or stake
     mapping(uint256 => Goal) public goalIdToGoal;
     mapping(uint256 => AdditionalStake) public stakeIdToStake;
 
+    // will be incremented when new goals/stakes are published
     uint256 goalId;
     uint256 stakeId;
 
@@ -92,17 +104,20 @@ contract LensGoal is LensGoalHelpers {
         if (inEther) {
             require(msg.value > 0, "msg.value must be greater than 0");
             AdditionalStake[] memory additionalstakes;
+            string[] memory proofs;
             Goal memory goal = Goal(
-                description,
-                verificationCriteria,
+                GoalBasicInfo(
+                    msg.sender,
+                    description,
+                    verificationCriteria,
+                    timestampEnd,
+                    Status.PENDING,
+                    goalId
+                ),
                 defaultEtherStake(),
                 Votes(0, 0),
-                GoalStatus.PENDING,
-                goalId,
-                // empty list as input
                 additionalstakes,
-                msg.sender,
-                timestampEnd
+                proofs
             );
             userToGoalIds[msg.sender].push(goalId);
             goalIdToGoal[goalId] = goal;
@@ -121,16 +136,20 @@ contract LensGoal is LensGoalHelpers {
                 "token transfer failed. check your approvals"
             );
             AdditionalStake[] memory additionalstakes;
+            string[] memory proofs;
             Goal memory goal = Goal(
-                description,
-                verificationCriteria,
-                Stake(TokenType.ERC20, tokenAmount, tokenAddress),
+                GoalBasicInfo(
+                    msg.sender,
+                    description,
+                    verificationCriteria,
+                    timestampEnd,
+                    Status.PENDING,
+                    goalId
+                ),
+                defaultEtherStake(),
                 Votes(0, 0),
-                GoalStatus.PENDING,
-                goalId,
                 additionalstakes,
-                msg.sender,
-                timestampEnd
+                proofs
             );
             userToGoalIds[msg.sender].push(goalId);
             goalIdToGoal[goalId] = goal;
@@ -150,7 +169,8 @@ contract LensGoal is LensGoalHelpers {
                 defaultEtherStake(),
                 stakeId,
                 _goalId,
-                msg.sender
+                msg.sender,
+                false
             );
             userToStakeIds[msg.sender].push(stakeId);
             goalIdToGoal[_goalId].additionalstakes.push(stake);
@@ -162,7 +182,8 @@ contract LensGoal is LensGoalHelpers {
                 Stake(TokenType.ERC20, tokenAmount, tokenAddress),
                 stakeId,
                 _goalId,
-                msg.sender
+                msg.sender,
+                false
             );
             userToStakeIds[msg.sender].push(stakeId);
             goalIdToGoal[_goalId].additionalstakes.push(stake);
@@ -173,5 +194,64 @@ contract LensGoal is LensGoalHelpers {
 
     function defaultEtherStake() internal view returns (Stake memory) {
         return Stake(TokenType.ETHER, msg.value, address(0));
+    }
+
+    function writeProofs(
+        /** take input of strings (links, etc.) */ string[] memory _proofs,
+        uint256 _goalId
+    ) external {
+        // check for user to be goal initiator
+        require(
+            goalIdToGoal[_goalId].info.user == msg.sender,
+            "not goal creator"
+        );
+        // iterate through each proof and append to proofs list
+        for (uint256 i; i < goalId; i++) {
+            goalIdToGoal[_goalId].proofs.push(_proofs[i]);
+        }
+    }
+
+    function getBasicInfo(
+        uint256 _goalId
+    ) public view returns (GoalBasicInfo memory) {
+        return goalIdToGoal[_goalId].info;
+    }
+
+    function vote(
+        uint256 _goalId,
+        bool input
+    ) external windowOpen(goalIdToGoal[_goalId].info.deadline) {
+        Goal memory goal = goalIdToGoal[_goalId];
+        if (input == true) {
+            goal.votes.yes++;
+        } else {
+            goal.votes.no++;
+        }
+    }
+
+    // checks if voting window is open
+    modifier windowOpen(uint256 startTimestamp) {
+        require(
+            block.timestamp > startTimestamp &&
+                block.timestamp < startTimestamp + 1 days
+        );
+        _;
+    }
+
+    function withdrawStake(uint256 _stakeId) external {
+        AdditionalStake memory stake = stakeIdToStake[_stakeId];
+        // identity check
+        require(stake.staker == msg.sender, "not staker");
+        // if stake is in ether, send ether back to msg.sender and set withdrawn to true
+        if (stake.stake.tokenType == TokenType.ETHER) {
+            payable(msg.sender).transfer(stake.stake.amount);
+            stake.withdrawn = true;
+        } else {
+            IERC20(stake.stake.tokenAddress).transfer(
+                msg.sender,
+                stake.stake.amount
+            );
+            stake.withdrawn = true;
+        }
     }
 }

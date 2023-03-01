@@ -21,7 +21,7 @@ import "./AutomationCompatible.sol";
 import "./AutomationCompatibleInterface.sol";
 
 contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
-    // wallet where funds will be transfered in case of goal failure
+    // wallet funds will be transfered here in case of goal failure
     // is currently the 0 address for simplicity, edit later
     address communityWallet = address(0);
     //----------------------------------------------------------------

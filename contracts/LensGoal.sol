@@ -205,7 +205,7 @@ contract LensGoal is LensGoalHelpers {
         additionalStake memory stake = additionalStakes[stakeId];
         // authenticate msg.sender
         require(msg.sender == stake.staker, "not staker");
-        // check to make sure stake is not withdrawn already to prevent theft
+        // check to make sure stake is not already withdrawn to prevent theft
         require(stake.stakeWithdrawn == false, "stake already withdrawn");
         if (stake.tokenType == TokenType.ETHER) {
             payable(msg.sender).transfer(stake.tokenAmount);

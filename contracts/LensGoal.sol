@@ -21,10 +21,11 @@ import "./AutomationCompatible.sol";
 import "./AutomationCompatibleInterface.sol";
 
 contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
+
     // wallet funds will be transfered here in case of goal failure
     // is currently the 0 address for simplicity, edit later
     address communityWallet = address(0);
-    //----------------------------------------------------------------
+    
     // Goal Mappings
     mapping(address => GoalEtherStake[]) public addressToGoalEtherStakes;
     mapping(address => GoalTokenStake[]) public addressToGoalTokenStakes;
@@ -35,12 +36,12 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
     // when voting time comes, votes will be sorted through list indexes
     mapping(uint256 => bool[]) public listIndexToVotesEtherStake;
     mapping(uint256 => bool[]) public listIndexToVotesTokenStake;
-    //----------------------------------------------------------------
+    
     // Global Goal Arrays
     // User may choose to stake either ERC20 tokens or Ether 
     GoalEtherStake[] public GoalEtherStakes;
     GoalTokenStake[] public GoalTokenStakes;
-    //----------------------------------------------------------------
+
     // Goal created with an Ether stake
     struct GoalEtherStake {
         address user;
@@ -60,13 +61,13 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
         uint256 listIndex;
         State state;
     }
-    //----------------------------------------------------------------
+
     enum State {
         IN_PROCCESS,
         VOTED_FALSE,
         VOTED_TRUE
     }
-    //----------------------------------------------------------------
+
     event GoalEtherStakeCreated(
         address indexed _user,
         string _goal,
@@ -94,7 +95,7 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
         uint256 _listIndex
     );
 
-    //----------------------------------------------------------------
+
     function makeGoalEtherStake(
         string memory goalDescription,
         uint256 timestampEnd
@@ -344,5 +345,5 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
     ) internal {
         IERC20(GTS.tokenAddress).transfer(communityWallet, GTS.tokenAmount);
     }
-    //----------------------------------------------------------------
+
 }

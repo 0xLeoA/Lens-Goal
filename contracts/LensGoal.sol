@@ -36,6 +36,7 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
     mapping(uint256 => bool[]) public listIndexToVotesTokenStake;
     //----------------------------------------------------------------
     // Global Goal Arrays
+    // User may choose to stake either ERC20 tokens or Ether 
     GoalEtherStake[] public GoalEtherStakes;
     GoalTokenStake[] public GoalTokenStakes;
     //----------------------------------------------------------------

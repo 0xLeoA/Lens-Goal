@@ -30,8 +30,9 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
     mapping(address => GoalTokenStake[]) public addressToGoalTokenStakes;
 
     // READER'S NOTE: LIST INDEX IS INDEX OF GOAL IN GLOBAL ARRAY
+    // EACH GOAL OBJECT HAS ITS OWN UNIQUE LIST INDEX
     // List Index to Votes mappings
-    // when voting time comes, votes will be sorted through list index
+    // when voting time comes, votes will be sorted through list indexes
     mapping(uint256 => bool[]) public listIndexToVotesEtherStake;
     mapping(uint256 => bool[]) public listIndexToVotesTokenStake;
     //----------------------------------------------------------------

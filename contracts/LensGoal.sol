@@ -26,7 +26,12 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
     // is currently the 0 address for simplicity, edit later
     address communityWallet = address(0);
     
-    // Goal Mappings
+    // Global Goal Arrays
+    // User may choose to stake either ERC20 tokens or Ether 
+    GoalEtherStake[] public GoalEtherStakes;
+    GoalTokenStake[] public GoalTokenStakes;
+    
+    // Goal Mappings (maps address to list of goals)
     mapping(address => GoalEtherStake[]) public addressToGoalEtherStakes;
     mapping(address => GoalTokenStake[]) public addressToGoalTokenStakes;
 
@@ -38,10 +43,6 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
     mapping(uint256 => bool[]) public listIndexToVotesEtherStake;
     mapping(uint256 => bool[]) public listIndexToVotesTokenStake;
     
-    // Global Goal Arrays
-    // User may choose to stake either ERC20 tokens or Ether 
-    GoalEtherStake[] public GoalEtherStakes;
-    GoalTokenStake[] public GoalTokenStakes;
 
     // Goal created with an Ether stake
     struct GoalEtherStake {

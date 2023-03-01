@@ -53,7 +53,8 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
         uint256 listIndex;
         State state;
     }
-    // Goal created with an ERC20 token stae
+    
+    // Goal created with an ERC20 token stake
     struct GoalTokenStake {
         address user;
         string goal;

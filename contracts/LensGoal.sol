@@ -47,8 +47,9 @@ contract LensGoal is LensGoalHelpers {
         // in unix timestamp format
         uint256 endTime;
         // newGoal's place in goals array
-        uint256 index;
+        uint256 goalId;
         GoalStatus status;
+        additionalStake[] stakes;
     }
 
     // friends can stake additional tokens/ether and are able to withdraw them at any time
@@ -69,22 +70,19 @@ contract LensGoal is LensGoalHelpers {
         uint256 stakeId;
         // local stakeId (stake's index in (address => stakeList))
         uint256 localStakeId;
-        // index in indexToAdditionalStakes mapping (e.g. if index is 0, and this is the stake #2 for goal with index 0, indexInIndexToAdditionalStakes will be 1)
-        uint256 indexInIndexToAdditionalStakes;
+        // stake's index in goal stake array
+        uint256 indexInGoalArray;
         // common global index
         // shared with the goal this stake is for
-        // (e.g if goal has index 0 in goals list, index here is also 0)
-        // this is how the amount of stakes for a specific goal is identifier
-        uint256 index;
+        // (e.g if goal has index 0 in goals list, goalId here is also 0)
+        // this is how the amount of stakes for a specific goal is identified
+        uint256 goalId;
     }
 
     // goal array (all goals are stored here)
     newGoal[] public goals;
     // address to list of goals mapping
     mapping(address => newGoal[]) public userToGoals;
-    // index to all additional stakes mapping
-    // index is the index of goal in goals list
-    mapping(uint256 => additionalStake[]) public indexToAdditionalStakes;
     // address to all created additionalStakes mapping
     // (all additionalStakes that specific address created)
     mapping(address => additionalStake[]) public addressToAdditionalStakes;
@@ -106,6 +104,7 @@ contract LensGoal is LensGoalHelpers {
             endTime > (block.timestamp + 60 * 60 * 24 - 360),
             "goal must end at least a day after initiation"
         );
+        additionalStake[] memory additionalstakes;
         if (inEther == true) {
             // add new goal to goals list
             goals.push(
@@ -117,7 +116,8 @@ contract LensGoal is LensGoalHelpers {
                     address(0),
                     endTime,
                     goals.length,
-                    GoalStatus.PENDING
+                    GoalStatus.PENDING,
+                    additionalstakes
                 )
             );
             // append new goal to (address => goals) mapping
@@ -142,7 +142,8 @@ contract LensGoal is LensGoalHelpers {
                     tokenAddress,
                     endTime,
                     goals.length,
-                    GoalStatus.PENDING
+                    GoalStatus.PENDING,
+                    additionalstakes
                 )
             );
             userToGoals[msg.sender].push(goals[goals.length - 1]);
@@ -154,9 +155,9 @@ contract LensGoal is LensGoalHelpers {
         uint256 tokenAmount,
         address tokenAddress,
         // index identifies which goal the stake is for
-        uint256 index
+        uint256 goalId
     ) external payable {
-        require(index <= goals.length - 1, "non existing index");
+        require(goalId <= goals.length - 1, "non existing index");
         // if token type is ether, tokenAddress will be "ignored" and set to address(0)
         if (inEther == true) {
             require(msg.value > 0, "cannot stake 0 matic");
@@ -168,10 +169,10 @@ contract LensGoal is LensGoalHelpers {
                 false,
                 additionalStakes.length,
                 addressToAdditionalStakes[msg.sender].length,
-                indexToAdditionalStakes[additionalStakes.length].length,
-                index
+                goals[goalId].stakes.length,
+                goalId
             );
-            indexToAdditionalStakes[index].push(newStake);
+            goals[goalId].stakes.push(newStake);
             addressToAdditionalStakes[msg.sender].push(newStake);
             additionalStakes.push(newStake);
         }
@@ -193,10 +194,10 @@ contract LensGoal is LensGoalHelpers {
                 false,
                 additionalStakes.length,
                 addressToAdditionalStakes[msg.sender].length,
-                indexToAdditionalStakes[additionalStakes.length].length,
-                index
+                goals[goalId].stakes.length,
+                goalId
             );
-            indexToAdditionalStakes[index].push(newStake);
+            goals[goalId].stakes.push(newStake);
             addressToAdditionalStakes[msg.sender].push(newStake);
             additionalStakes.push(newStake);
         }
@@ -224,14 +225,13 @@ contract LensGoal is LensGoalHelpers {
     // used in withdrawStake()
     function updateStakes(uint256 stakeId) internal {
         additionalStake memory stake = additionalStakes[stakeId];
-        uint256 index = stake.index;
+        uint256 goalId = stake.goalId;
         address staker = stake.staker;
         uint256 localStakeId = stake.localStakeId;
-        uint256 indexInIndexToAdditionalStakes = stake.index;
+        uint256 indexInGoalArray = stake.indexInGoalArray;
 
         additionalStakes[stakeId].stakeWithdrawn == true;
         addressToAdditionalStakes[staker][localStakeId].stakeWithdrawn == true;
-        indexToAdditionalStakes[index][indexInIndexToAdditionalStakes]
-            .stakeWithdrawn == true;
+        goals[goalId].stakes[indexInGoalArray].stakeWithdrawn == true;
     }
 }

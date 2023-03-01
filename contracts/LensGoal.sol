@@ -107,21 +107,20 @@ contract LensGoal is LensGoalHelpers {
         additionalStake[] memory additionalstakes;
         if (inEther == true) {
             // add new goal to goals list
-            goals.push(
-                newGoal(
-                    description,
-                    msg.sender,
-                    TokenType.ETHER,
-                    msg.value,
-                    address(0),
-                    endTime,
-                    goals.length,
-                    GoalStatus.PENDING,
-                    additionalstakes
-                )
+            newGoal memory goal = newGoal(
+                description,
+                msg.sender,
+                TokenType.ETHER,
+                msg.value,
+                address(0),
+                endTime,
+                goals.length,
+                GoalStatus.PENDING,
+                additionalstakes
             );
+            goals.push(goal);
             // append new goal to (address => goals) mapping
-            userToGoals[msg.sender].push(goals[goals.length - 1]);
+            userToGoals[msg.sender].push(goal);
         }
         if (inEther == false) {
             // transfer ERC20 tokens to contract
@@ -133,20 +132,19 @@ contract LensGoal is LensGoalHelpers {
                 ) == true,
                 "transfer from tx failed, check approval settings"
             );
-            goals.push(
-                newGoal(
-                    description,
-                    msg.sender,
-                    TokenType.ERC20,
-                    tokenAmount,
-                    tokenAddress,
-                    endTime,
-                    goals.length,
-                    GoalStatus.PENDING,
-                    additionalstakes
-                )
+            newGoal memory goal = newGoal(
+                description,
+                msg.sender,
+                TokenType.ERC20,
+                tokenAmount,
+                tokenAddress,
+                endTime,
+                goals.length,
+                GoalStatus.PENDING,
+                additionalstakes
             );
-            userToGoals[msg.sender].push(goals[goals.length - 1]);
+            goals.push(goal);
+            userToGoals[msg.sender].push(goal);
         }
     }
 
@@ -235,3 +233,4 @@ contract LensGoal is LensGoalHelpers {
         goals[goalId].stakes[indexInGoalArray].stakeWithdrawn == true;
     }
 }
+

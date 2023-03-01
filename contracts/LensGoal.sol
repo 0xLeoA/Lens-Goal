@@ -63,6 +63,7 @@ contract LensGoal is LensGoalHelpers {
         uint256 goalId;
         AdditionalStake[] additionalstakes;
         address user;
+        uint256 end;
     }
 
     struct AdditionalStake {
@@ -85,7 +86,8 @@ contract LensGoal is LensGoalHelpers {
         string memory verificationCriteria,
         bool inEther,
         uint256 tokenAmount,
-        address tokenAddress
+        address tokenAddress,
+        uint256 timestampEnd
     ) external payable {
         if (inEther) {
             require(msg.value > 0, "msg.value must be greater than 0");
@@ -99,7 +101,8 @@ contract LensGoal is LensGoalHelpers {
                 goalId,
                 // empty list as input
                 additionalstakes,
-                msg.sender
+                msg.sender,
+                timestampEnd
             );
             userToGoalIds[msg.sender].push(goalId);
             goalIdToGoal[goalId] = goal;
@@ -126,7 +129,8 @@ contract LensGoal is LensGoalHelpers {
                 GoalStatus.PENDING,
                 goalId,
                 additionalstakes,
-                msg.sender
+                msg.sender,
+                timestampEnd
             );
             userToGoalIds[msg.sender].push(goalId);
             goalIdToGoal[goalId] = goal;

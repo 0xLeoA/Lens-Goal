@@ -23,13 +23,17 @@ import "./AutomationCompatibleInterface.sol";
 contract LensGoal is LensGoalHelpers {
     // wallet where funds will be transfered in case of goal failure
     // is currently the 0 address for simplicity, edit later
-    address communityWallet = address(0);
 
-    // TokenType enum, used in newGoal and additionalStake struct to identify whether stake is in ether or erc20
+    address communityWallet = address(0);
+    uint256 constant HOURS_24 = 1 days;
+    uint256 constant MINUTES_6 = 60 * 6;
+
+    // used to identify whether stake is in ether or erc20
     enum TokenType {
         ETHER,
         ERC20
     }
+
     // GoalStatus enum, used to check goal status (e.g. "pending", "true", "false")
     enum GoalStatus {
         PENDING,
@@ -37,200 +41,133 @@ contract LensGoal is LensGoalHelpers {
         VOTED_FALSE
     }
 
-    struct newGoal {
+    struct Votes {
+        uint256 yes;
+        uint256 no;
+    }
+
+    struct Stake {
+        // stake can be ether or erc20
+        TokenType tokenType;
+        uint256 amount;
+        // is address(0) if token type is ether
+        address tokenAddress;
+    }
+
+    struct Goal {
         string description;
-        address user;
-        TokenType tokenType;
-        uint256 tokenAmount;
-        // address(0) if token type is ether
-        address tokenAddress;
-        // in unix timestamp format
-        uint256 endTime;
-        // newGoal's place in goals array
-        uint256 goalId;
+        string verificationCriteria;
+        Stake stake;
+        Votes votes;
         GoalStatus status;
-        additionalStake[] stakes;
-    }
-
-    // friends can stake additional tokens/ether and are able to withdraw them at any time
-    // (unless the goal they are staking for is voted true and tokens are sent off)
-    // the allowed withdrawals are implemented to remove unfair voting
-    // if user fails goal, all additional stakes will be sent back to their stakers
-    struct additionalStake {
-        address staker;
-        // determines if stake is in ether or erc20
-        TokenType tokenType;
-        uint256 tokenAmount;
-        // defaults to address(0) if token type is ether
-        address tokenAddress;
-        // if donator decides to withdraw stake or voting windows is closed and funds are sent off, stakeWithdrawn will = true
-        // defaults to false
-        bool stakeWithdrawn;
-        // global stakeId (stake's index in additionalStakes array)
-        uint256 stakeId;
-        // local stakeId (stake's index in (address => stakeList))
-        uint256 localStakeId;
-        // stake's index in goal stake array
-        uint256 indexInGoalArray;
-        // common global index
-        // shared with the goal this stake is for
-        // (e.g if goal has index 0 in goals list, goalId here is also 0)
-        // this is how the amount of stakes for a specific goal is identified
         uint256 goalId;
+        AdditionalStake[] additionalstakes;
+        address user;
     }
 
-    // goal array (all goals are stored here)
-    newGoal[] public goals;
-    // address to list of goals mapping
-    mapping(address => newGoal[]) public userToGoals;
-    // address to all created additionalStakes mapping
-    // (all additionalStakes that specific address created)
-    mapping(address => additionalStake[]) public addressToAdditionalStakes;
-    // array of additionalStakes
-    additionalStake[] public additionalStakes;
+    struct AdditionalStake {
+        Stake stake;
+        uint256 stakeId;
+        uint256 goalId;
+        address staker;
+    }
 
-    function makeGoal(
+    mapping(address => uint256[]) public userToGoalIds;
+    mapping(address => uint256[]) public userToStakeIds;
+    mapping(uint256 => Goal) public goalIdToGoal;
+    mapping(uint256 => AdditionalStake) public stakeIdToStake;
+
+    uint256 goalId;
+    uint256 stakeId;
+
+    function makeNewGoal(
         string memory description,
+        string memory verificationCriteria,
         bool inEther,
         uint256 tokenAmount,
-        address tokenAddress,
-        uint256 endTime
+        address tokenAddress
     ) external payable {
-        // tokenAmount and tokenAddress default to 0 and address(0) if inEth == True
-        // 60*60*24 seconds = 1 day
-        // On web page user will be prompted to select options ranging from at least a day
-        // allows for up to a 6 minute time delay between function call initiation in metamask and user submission / tx confirmation
-        require(
-            endTime > (block.timestamp + 60 * 60 * 24 - 360),
-            "goal must end at least a day after initiation"
-        );
-        additionalStake[] memory additionalstakes;
-        if (inEther == true) {
-            // add new goal to goals list
-            newGoal memory goal = newGoal(
+        if (inEther) {
+            require(msg.value > 0, "msg.value must be greater than 0");
+            AdditionalStake[] memory additionalstakes;
+            Goal memory goal = Goal(
                 description,
-                msg.sender,
-                TokenType.ETHER,
-                msg.value,
-                address(0),
-                endTime,
-                goals.length,
+                verificationCriteria,
+                defaultEtherStake(),
+                Votes(0, 0),
                 GoalStatus.PENDING,
-                additionalstakes
+                goalId,
+                // empty list as input
+                additionalstakes,
+                msg.sender
             );
-            goals.push(goal);
-            // append new goal to (address => goals) mapping
-            userToGoals[msg.sender].push(goal);
-        }
-        if (inEther == false) {
-            // transfer ERC20 tokens to contract
-            require(
-                IERC20(tokenAddress).transferFrom(
-                    msg.sender,
-                    address(this),
-                    tokenAmount
-                ) == true,
-                "transfer from tx failed, check approval settings"
-            );
-            newGoal memory goal = newGoal(
-                description,
-                msg.sender,
-                TokenType.ERC20,
-                tokenAmount,
-                tokenAddress,
-                endTime,
-                goals.length,
-                GoalStatus.PENDING,
-                additionalstakes
-            );
-            goals.push(goal);
-            userToGoals[msg.sender].push(goal);
-        }
-    }
-
-    function makeAdditionalStake(
-        bool inEther,
-        uint256 tokenAmount,
-        address tokenAddress,
-        // identifies which goal the stake is for
-        uint256 goalId
-    ) external payable {
-        require(goalId <= goals.length - 1, "non existing index");
-        // if token type is ether, tokenAddress will be "ignored" and set to address(0)
-        if (inEther == true) {
-            require(msg.value > 0, "cannot stake 0 matic");
-            additionalStake memory newStake = additionalStake(
-                msg.sender,
-                TokenType.ETHER,
-                msg.value,
-                address(0),
-                false,
-                additionalStakes.length,
-                addressToAdditionalStakes[msg.sender].length,
-                goals[goalId].stakes.length,
-                goalId
-            );
-            goals[goalId].stakes.push(newStake);
-            addressToAdditionalStakes[msg.sender].push(newStake);
-            additionalStakes.push(newStake);
-        }
-        if (inEther == false) {
-            require(tokenAmount > 0, "cannot stake 0 tokens");
-            require(
-                IERC20(tokenAddress).transferFrom(
-                    msg.sender,
-                    address(this),
-                    tokenAmount
-                ) == true,
-                "token transfer failed, check approval settings"
-            );
-            additionalStake memory newStake = additionalStake(
-                msg.sender,
-                TokenType.ERC20,
-                tokenAmount,
-                tokenAddress,
-                false,
-                additionalStakes.length,
-                addressToAdditionalStakes[msg.sender].length,
-                goals[goalId].stakes.length,
-                goalId
-            );
-            goals[goalId].stakes.push(newStake);
-            addressToAdditionalStakes[msg.sender].push(newStake);
-            additionalStakes.push(newStake);
-        }
-    }
-
-    function withdrawStake(uint256 stakeId) external {
-        additionalStake memory stake = additionalStakes[stakeId];
-        // authenticate msg.sender
-        require(msg.sender == stake.staker, "not staker");
-        // check to make sure stake is not already withdrawn to prevent theft
-        require(stake.stakeWithdrawn == false, "stake already withdrawn");
-        if (stake.tokenType == TokenType.ETHER) {
-            payable(msg.sender).transfer(stake.tokenAmount);
-            updateStakes(stakeId);
+            userToGoalIds[msg.sender].push(goalId);
+            goalIdToGoal[goalId] = goal;
+            // increment goalId for later goal instantiation
+            goalId++;
         } else {
-            IERC20(stake.tokenAddress).transfer(
-                stake.staker,
-                stake.tokenAmount
+            // safety check
+            require(tokenAmount > 0, "tokenAmount must be greater than 0");
+            // transfer tokens to contracts
+            require(
+                IERC20(tokenAddress).transferFrom(
+                    msg.sender,
+                    address(this),
+                    tokenAmount
+                ) == true,
+                "token transfer failed. check your approvals"
             );
-            updateStakes(stakeId);
+            AdditionalStake[] memory additionalstakes;
+            Goal memory goal = Goal(
+                description,
+                verificationCriteria,
+                Stake(TokenType.ERC20, tokenAmount, tokenAddress),
+                Votes(0, 0),
+                GoalStatus.PENDING,
+                goalId,
+                additionalstakes,
+                msg.sender
+            );
+            userToGoalIds[msg.sender].push(goalId);
+            goalIdToGoal[goalId] = goal;
+            goalId++;
         }
     }
 
-    // changes all stake objects in storage with the same stakeId to withdrawn
-    // used in withdrawStake()
-    function updateStakes(uint256 stakeId) internal {
-        additionalStake memory stake = additionalStakes[stakeId];
-        uint256 goalId = stake.goalId;
-        address staker = stake.staker;
-        uint256 localStakeId = stake.localStakeId;
-        uint256 indexInGoalArray = stake.indexInGoalArray;
+    function makeNewStake(
+        /* which goal the stake is for**/ uint256 _goalId,
+        bool inEther,
+        uint256 tokenAmount,
+        address tokenAddress
+    ) external payable {
+        if (inEther) {
+            require(msg.value > 0, "msg.value must be greater than 0");
+            AdditionalStake memory stake = AdditionalStake(
+                defaultEtherStake(),
+                stakeId,
+                _goalId,
+                msg.sender
+            );
+            userToStakeIds[msg.sender].push(stakeId);
+            goalIdToGoal[_goalId].additionalstakes.push(stake);
+            stakeIdToStake[stakeId] = stake;
+            stakeId++;
+        } else {
+            require(tokenAmount > 0, "tokenAmount must be greater than 0");
+            AdditionalStake memory stake = AdditionalStake(
+                Stake(TokenType.ERC20, tokenAmount, tokenAddress),
+                stakeId,
+                _goalId,
+                msg.sender
+            );
+            userToStakeIds[msg.sender].push(stakeId);
+            goalIdToGoal[_goalId].additionalstakes.push(stake);
+            stakeIdToStake[stakeId] = stake;
+            stakeId++;
+        }
+    }
 
-        additionalStakes[stakeId].stakeWithdrawn == true;
-        addressToAdditionalStakes[staker][localStakeId].stakeWithdrawn == true;
-        goals[goalId].stakes[indexInGoalArray].stakeWithdrawn == true;
+    function defaultEtherStake() internal view returns (Stake memory) {
+        return Stake(TokenType.ETHER, msg.value, address(0));
     }
 }
-

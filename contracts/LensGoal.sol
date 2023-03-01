@@ -11,7 +11,7 @@
 
 // Team Lens Handles:
 // cryptocomical.lens       | Designer
-// (Add Greg's name here)   | Front-End / Smart Contract developer
+// (Add Greg's name here)   | Front-End and Smart Contract developer
 // leoawolanski.lens        | Smart Contract Developer
 
 pragma solidity 0.8.17;
@@ -20,333 +20,218 @@ import "./LensGoalHelpers.sol";
 import "./AutomationCompatible.sol";
 import "./AutomationCompatibleInterface.sol";
 
-contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
-
-    // wallet funds will be transfered here in case of goal failure
+contract LensGoal is LensGoalHelpers {
+    // wallet where funds will be transfered in case of goal failure
     // is currently the 0 address for simplicity, edit later
     address communityWallet = address(0);
-    
-    // Global Goal Arrays
-    // User may choose to stake either ERC20 tokens or Ether 
-    GoalEtherStake[] public GoalEtherStakes;
-    GoalTokenStake[] public GoalTokenStakes;
-    
-    // Goal Mappings (maps address to list of goals)
-    mapping(address => GoalEtherStake[]) public addressToGoalEtherStakes;
-    mapping(address => GoalTokenStake[]) public addressToGoalTokenStakes;
 
-    // READER'S NOTE: LIST INDEX IS INDEX OF GOAL IN GLOBAL ARRAY
-    // EACH GOAL OBJECT HAS ITS OWN UNIQUE LIST INDEX
-    
-    // list index to votes mappings
-    // when voting time comes, votes will be sorted through list indexes
-    mapping(uint256 => bool[]) public listIndexToVotesEtherStake;
-    mapping(uint256 => bool[]) public listIndexToVotesTokenStake;
-    
-
-    // Goal created with an Ether stake
-    struct GoalEtherStake {
-        address user;
-        string goal;
-        uint256 timestampEnd;
-        uint256 etherAmount;
-        uint256 listIndex;
-        State state;
+    // TokenType enum, used in newGoal and additionalStake struct to identify whether stake is in ether or erc20
+    enum TokenType {
+        ETHER,
+        ERC20
     }
-    
-    // Goal created with an ERC20 token stake
-    struct GoalTokenStake {
+    // GoalStatus enum, used to check goal status (e.g. "pending", "true", "false")
+    enum GoalStatus {
+        PENDING,
+        VOTED_TRUE,
+        VOTED_FALSE
+    }
+
+    struct newGoal {
+        string description;
         address user;
-        string goal;
-        uint256 timestampEnd;
-        address tokenAddress;
+        TokenType tokenType;
         uint256 tokenAmount;
-        uint256 listIndex;
-        State state;
+        // address(0) if token type is ether
+        address tokenAddress;
+        // in unix timestamp format
+        uint256 endTime;
+        // newGoal's place in goals array
+        uint256 index;
+        GoalStatus status;
     }
 
-    enum State {
-        IN_PROCCESS,
-        VOTED_FALSE,
-        VOTED_TRUE
+    // friends can stake additional tokens/ether and are able to withdraw them at any time
+    // (unless the goal they are staking for is voted true and tokens are sent off)
+    // the allowed withdrawals are implemented to remove unfair voting
+    // if user fails goal, all additional stakes will be sent back to their stakers
+    struct additionalStake {
+        address staker;
+        // determines if stake is in ether or erc20
+        TokenType tokenType;
+        uint256 tokenAmount;
+        // defaults to address(0) if token type is ether
+        address tokenAddress;
+        // if donator decides to withdraw stake or voting windows is closed and funds are sent off, stakeWithdrawn will = true
+        // defaults to false
+        bool stakeWithdrawn;
+        // global stakeId (stake's index in additionalStakes array)
+        uint256 stakeId;
+        // local stakeId (stake's index in (address => stakeList))
+        uint256 localStakeId;
+        // index in indexToAdditionalStakes mapping (e.g. if index is 0, and this is the stake #2 for goal with index 0, indexInIndexToAdditionalStakes will be 1)
+        uint256 indexInIndexToAdditionalStakes;
+        // common global index
+        // shared with the goal this stake is for
+        // (e.g if goal has index 0 in goals list, index here is also 0)
+        // this is how the amount of stakes for a specific goal is identifier
+        uint256 index;
     }
 
-    event GoalEtherStakeCreated(
-        address indexed _user,
-        string _goal,
-        uint256 _timestampEnd,
-        uint256 _etherAmount,
-        uint256 _listIndex
-    );
-    event GoalTokenStakeCreated(
-        address indexed _user,
-        string _goal,
-        uint256 _timestampEnd,
-        address indexed _tokenAddress,
-        uint256 _tokenAmount,
-        uint256 _listIndex
-    );
+    // goal array (all goals are stored here)
+    newGoal[] public goals;
+    // address to list of goals mapping
+    mapping(address => newGoal[]) public userToGoals;
+    // index to all additional stakes mapping
+    // index is the index of goal in goals list
+    mapping(uint256 => additionalStake[]) public indexToAdditionalStakes;
+    // address to all created additionalStakes mapping
+    // (all additionalStakes that specific address created)
+    mapping(address => additionalStake[]) public addressToAdditionalStakes;
+    // array of additionalStakes
+    additionalStake[] public additionalStakes;
 
-    event GoalEtherStakeVote(
-        address indexed _voter,
-        bool _vote,
-        uint256 _listIndex
-    );
-    event GoalTokenStakeVote(
-        address indexed _voter,
-        bool _vote,
-        uint256 _listIndex
-    );
-
-
-    function makeGoalEtherStake(
-        string memory goalDescription,
-        uint256 timestampEnd
-    ) external payable {
-        // 86400 seconds = 24 hours
-        // 400 second delay to account for slow users
-        require(
-            timestampEnd > (block.timestamp + 86000),
-            "goal must end in at least a day after initialization, try again"
-        );
-        // map user to goal
-        addressToGoalEtherStakes[msg.sender].push(
-            GoalEtherStake(
-                msg.sender,
-                goalDescription,
-                timestampEnd,
-                msg.value,
-                GoalEtherStakes.length,
-                State.IN_PROCCESS
-            )
-        );
-        // add goal to list
-        GoalEtherStakes.push(
-            addressToGoalEtherStakes[msg.sender][
-                addressToGoalEtherStakes[msg.sender].length - 1
-            ]
-        );
-        emit GoalEtherStakeCreated(
-            msg.sender,
-            goalDescription,
-            timestampEnd,
-            msg.value,
-            GoalEtherStakes.length - 1
-        );
-    }
-
-    function makeGoalTokenStake(
-        string memory goalDescription,
-        uint256 timestampEnd,
+    function makeGoal(
+        string memory description,
+        bool inEther,
+        uint256 tokenAmount,
         address tokenAddress,
-        uint256 tokenAmount
-    ) external {
+        uint256 endTime
+    ) external payable {
+        // tokenAmount and tokenAddress default to 0 and address(0) if inEth == True
+        // 60*60*24 seconds = 1 day
+        // On web page user will be prompted to select options ranging from at least a day
+        // allows for up to a 6 minute time delay between function call initiation in metamask and user submission / tx confirmation
         require(
-            timestampEnd > (block.timestamp + 86000),
-            "goal must end in at least a day after initialization"
+            endTime > (block.timestamp + 60 * 60 * 24 - 360),
+            "goal must end at least a day after initiation"
         );
-        require(
-            IERC20(tokenAddress).transferFrom(
-                msg.sender,
-                address(this),
-                tokenAmount
-            ) == true,
-            "token transfer failed, check your approval settings"
-        );
+        if (inEther == true) {
+            // add new goal to goals list
+            goals.push(
+                newGoal(
+                    description,
+                    msg.sender,
+                    TokenType.ETHER,
+                    msg.value,
+                    address(0),
+                    endTime,
+                    goals.length,
+                    GoalStatus.PENDING
+                )
+            );
+            // append new goal to (address => goals) mapping
+            userToGoals[msg.sender].push(goals[goals.length - 1]);
+        }
+        if (inEther == false) {
+            // transfer ERC20 tokens to contract
+            require(
+                IERC20(tokenAddress).transferFrom(
+                    msg.sender,
+                    address(this),
+                    tokenAmount
+                ) == true,
+                "transfer from tx failed, check approval settings"
+            );
+            goals.push(
+                newGoal(
+                    description,
+                    msg.sender,
+                    TokenType.ERC20,
+                    tokenAmount,
+                    tokenAddress,
+                    endTime,
+                    goals.length,
+                    GoalStatus.PENDING
+                )
+            );
+            userToGoals[msg.sender].push(goals[goals.length - 1]);
+        }
+    }
 
-        // map user to goal
-        addressToGoalTokenStakes[msg.sender].push(
-            GoalTokenStake(
+    function makeAdditionalStake(
+        bool inEther,
+        uint256 tokenAmount,
+        address tokenAddress,
+        // index identifies which goal the stake is for
+        uint256 index
+    ) external payable {
+        require(index <= goals.length - 1, "non existing index");
+        // if token type is ether, tokenAddress will be "ignored" and set to address(0)
+        if (inEther == true) {
+            require(msg.value > 0, "cannot stake 0 matic");
+            additionalStake memory newStake = additionalStake(
                 msg.sender,
-                goalDescription,
-                timestampEnd,
-                tokenAddress,
+                TokenType.ETHER,
+                msg.value,
+                address(0),
+                false,
+                additionalStakes.length,
+                addressToAdditionalStakes[msg.sender].length,
+                indexToAdditionalStakes[additionalStakes.length].length,
+                index
+            );
+            indexToAdditionalStakes[index].push(newStake);
+            addressToAdditionalStakes[msg.sender].push(newStake);
+            additionalStakes.push(newStake);
+        }
+        if (inEther == false) {
+            require(tokenAmount > 0, "cannot stake 0 tokens");
+            require(
+                IERC20(tokenAddress).transferFrom(
+                    msg.sender,
+                    address(this),
+                    tokenAmount
+                ) == true,
+                "token transfer failed, check approval settings"
+            );
+            additionalStake memory newStake = additionalStake(
+                msg.sender,
+                TokenType.ERC20,
                 tokenAmount,
-                GoalTokenStakes.length,
-                State.IN_PROCCESS
-            )
-        );
-        // add goal to list
-        GoalTokenStakes.push(
-            addressToGoalTokenStakes[msg.sender][
-                addressToGoalTokenStakes[msg.sender].length - 1
-            ]
-        );
-        emit GoalTokenStakeCreated(
-            msg.sender,
-            goalDescription,
-            timestampEnd,
-            tokenAddress,
-            tokenAmount,
-            GoalTokenStakes.length - 1
-        );
-    }
-
-    function voteOnTokenStake(uint256 goalIndex, bool answer) external {
-        // get goal
-        GoalTokenStake memory goal = GoalTokenStakes[goalIndex];
-        // get follower nft address
-        address followerNFTAddress = getFollowerNFTAddress(goal.user);
-        // check if msg.sender is following user (holds nft)
-        require(
-            IERC721(followerNFTAddress).balanceOf(msg.sender) > 0,
-            "you are not following specified user"
-        );
-        // get end timestamp
-        uint256 timestampEnd = goal.timestampEnd;
-        // make sure voting window is opened
-        require(
-            block.timestamp >= timestampEnd &&
-                block.timestamp < (timestampEnd + 86400),
-            "voting window not opened/closed"
-        );
-        listIndexToVotesTokenStake[goalIndex].push(answer);
-        emit GoalTokenStakeVote(msg.sender, answer, goalIndex);
-    }
-
-    function voteOnEtherStake(uint256 goalIndex, bool answer) external {
-        // get goal
-        GoalEtherStake memory goal = GoalEtherStakes[goalIndex];
-        // get follower nft address
-        address followerNFTAddress = getFollowerNFTAddress(goal.user);
-        // check if msg.sender is following user (holds nft)
-        require(
-            IERC721(followerNFTAddress).balanceOf(msg.sender) > 0,
-            "you are not following specified user"
-        );
-        // get end timestamp
-        uint256 timestampEnd = goal.timestampEnd;
-        // make sure voting window is opened
-        require(
-            block.timestamp >= timestampEnd &&
-                block.timestamp < (timestampEnd + 86400),
-            "voting window not opened/closed"
-        );
-        // add vote
-        listIndexToVotesEtherStake[goalIndex].push(answer);
-        emit GoalEtherStakeVote(msg.sender, answer, goalIndex);
-    }
-
-    function getBlockTimestamp() public view returns (uint256) {
-        return block.timestamp;
-    }
-
-    function getGoalEtherStake(
-        uint256 index
-    ) public view returns (GoalEtherStake memory) {
-        return GoalEtherStakes[index];
-    }
-
-    function getGoalTokenStake(
-        uint256 index
-    ) public view returns (GoalTokenStake memory) {
-        return GoalTokenStakes[index];
-    }
-
-    function getGoalEtherStakesByAddress(
-        address user
-    ) public view returns (GoalEtherStake[] memory) {
-        return addressToGoalEtherStakes[user];
-    }
-
-    function getGoalTokenStakesByAddress(
-        address user
-    ) public view returns (GoalTokenStake[] memory) {
-        return addressToGoalTokenStakes[user];
-    }
-
-    // chainlink checker function
-    // chainlink runs this function every block
-    // if return is true, chainlink will run state changing performUpkeep() function
-    function checkUpkeep(
-        bytes calldata /*checkData */
-    )
-        external
-        view
-        override
-        returns (bool upkeepNeeded, bytes memory /* performData */)
-    {
-        for (uint256 i; i < GoalEtherStakes.length; i++) {
-            GoalEtherStake memory GES = GoalEtherStakes[i];
-            if (block.timestamp > (GES.timestampEnd + 60 * 60 * 24)) {
-                return (true, bytes("LensGoal"));
-            }
-            for (uint256 index; index < GoalEtherStakes.length; index++) {
-                GoalTokenStake memory GTS = GoalTokenStakes[index];
-                if (block.timestamp > (GTS.timestampEnd + 60 * 60 * 24)) {
-                    return (true, bytes("LensGoal"));
-                }
-            }
-            return (false, bytes("LensGoal"));
+                tokenAddress,
+                false,
+                additionalStakes.length,
+                addressToAdditionalStakes[msg.sender].length,
+                indexToAdditionalStakes[additionalStakes.length].length,
+                index
+            );
+            indexToAdditionalStakes[index].push(newStake);
+            addressToAdditionalStakes[msg.sender].push(newStake);
+            additionalStakes.push(newStake);
         }
     }
 
-    // chainlink statechanging transaction
-    // chainlink runs checkUpkeep function every block, if return is true performUpkeep function will be run
-    function performUpkeep(bytes calldata /* performData */) external override {
-        // iterate through all items in GoalEtherStakes
-        for (uint256 i; i < GoalEtherStakes.length; i++) {
-            // "GES" stands for "Goal Ether Stake"
-            GoalEtherStake memory GES = GoalEtherStakes[i];
-            uint256 listIndex = GES.listIndex;
-            // check if voting window expired
-            // (60*60*24 seconds is 1 day)
-            if (block.timestamp > (GES.timestampEnd + 60 * 60 * 24)) {
-                // calculate result of votes (see evaluateVotes() in LensGoalHelpers.sol)
-                bool result = evaluateVotes(
-                    listIndexToVotesEtherStake[listIndex]
-                );
-                // if result is true, ether is sent back to user
-                if (result == true) {
-                    transferEtherStakeBackToUser(GES);
-                }
-                if (result == false) {
-                    transferEtherStakeToCommunityWallet(GES);
-                }
-            }
-        }
-
-        // iterate through all items in GoalTokenStakes[]
-        // note: GTS = GoalTokenStake
-        for (uint256 index; index < GoalTokenStakes.length; index++) {
-            GoalTokenStake memory GTS = GoalTokenStakes[index];
-            // get list index
-            uint256 listIndex = GTS.listIndex;
-            GoalTokenStake memory GES = GoalTokenStakes[index];
-            // checks if current timestamp is one day after voting window opened
-            if (block.timestamp > (GES.timestampEnd + 60 * 60 * 24)) {
-                // gets result of votes
-                bool result = evaluateVotes(
-                    listIndexToVotesEtherStake[listIndex]
-                );
-                if (result == true) {
-                    transferTokenStakeBackToUser(GTS);
-                }
-                if (result == false) {
-                    transferTokenStakeToCommunityWallet(GTS);
-                }
-            }
+    function withdrawStake(uint256 stakeId) external {
+        additionalStake memory stake = additionalStakes[stakeId];
+        // authenticate msg.sender
+        require(msg.sender == stake.staker, "not staker");
+        // check to make sure stake is not withdrawn already to prevent theft
+        require(stake.stakeWithdrawn == false, "stake already withdrawn");
+        if (stake.tokenType == TokenType.ETHER) {
+            payable(msg.sender).transfer(stake.tokenAmount);
+            updateStakes(stakeId);
+        } else {
+            IERC20(stake.tokenAddress).transfer(
+                stake.staker,
+                stake.tokenAmount
+            );
+            updateStakes(stakeId);
         }
     }
 
-    function transferEtherStakeBackToUser(GoalEtherStake memory GES) internal {
-        payable(GES.user).transfer(GES.etherAmount);
-    }
+    // changes all stake objects in storage with the same stakeId to withdrawn
+    // used in withdrawStake()
+    function updateStakes(uint256 stakeId) internal {
+        additionalStake memory stake = additionalStakes[stakeId];
+        uint256 index = stake.index;
+        address staker = stake.staker;
+        uint256 localStakeId = stake.localStakeId;
+        uint256 indexInIndexToAdditionalStakes = stake.index;
 
-    function transferTokenStakeBackToUser(GoalTokenStake memory GTS) internal {
-        IERC20(GTS.tokenAddress).transfer(GTS.user, GTS.tokenAmount);
+        additionalStakes[stakeId].stakeWithdrawn == true;
+        addressToAdditionalStakes[staker][localStakeId].stakeWithdrawn == true;
+        indexToAdditionalStakes[index][indexInIndexToAdditionalStakes]
+            .stakeWithdrawn == true;
     }
-
-    function transferEtherStakeToCommunityWallet(
-        GoalEtherStake memory GES
-    ) internal {
-        payable(communityWallet).transfer(GES.etherAmount);
-    }
-
-    function transferTokenStakeToCommunityWallet(
-        GoalTokenStake memory GTS
-    ) internal {
-        IERC20(GTS.tokenAddress).transfer(communityWallet, GTS.tokenAmount);
-    }
-
 }

@@ -328,6 +328,12 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
                         goalIdToGoal[i].info.goalId
                     );
                     goalIdToGoal[i].info.status = Status.VOTED_TRUE;
+                } else {
+                    transferStakes(
+                        accomplishedGoal,
+                        goalIdToGoal[i].info.goalId
+                    );
+                    goalIdToGoal[i].info.status = Status.VOTED_FALSE;
                 }
             }
         }

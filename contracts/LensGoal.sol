@@ -65,9 +65,9 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
         GoalBasicInfo info;
         Stake stake;
         Votes votes;
-        AdditionalStake[] additionalstakes;
         string preProof;
         string proof;
+        // when new stake is created it will be given this localStakeId. localStakeId will then be incremented
     }
 
     struct AdditionalStake {
@@ -84,9 +84,12 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
     // get address's stake and goal ids
     mapping(address => uint256[]) public userToGoalIds;
     mapping(address => uint256[]) public userToStakeIds;
-    // each id is a goal or stake
+    // each id = goal
     mapping(uint256 => Goal) public goalIdToGoal;
+    // each id = stake
     mapping(uint256 => AdditionalStake) public stakeIdToStake;
+    // maps goal to all stakeId of stakes for that goal
+    mapping(uint256 => uint256[]) goalIdToStakeIds;
 
     // will be incremented when new goals/stakes are published
     uint256 goalId;
@@ -106,7 +109,6 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
             // require(msg.value > 0, "msg.value must be greater than 0");
             // why user can stake nothing:
             // so that user can have friends stake as "rewards" and themselves stake nothing
-            AdditionalStake[] memory additionalstakes;
             userToGoalIds[msg.sender].push(goalId);
             goalIdToGoal[goalId] = Goal(
                 GoalBasicInfo(
@@ -119,7 +121,6 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
                 ),
                 defaultEtherStake(),
                 Votes(0, 0),
-                additionalstakes,
                 preProof,
                 ""
             );
@@ -136,7 +137,6 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
                 ) == true,
                 "token transfer failed. check your approvals"
             );
-            AdditionalStake[] memory additionalstakes;
             Goal memory goal = Goal(
                 // define info struct
                 GoalBasicInfo(
@@ -151,8 +151,6 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
                 defaultEtherStake(),
                 // votes struct
                 Votes(0, 0),
-                // empty list s
-                additionalstakes,
                 preProof,
                 ""
             );
@@ -190,7 +188,7 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
             // push stakeId
             userToStakeIds[msg.sender].push(stakeId);
             // add stake to goal
-            goalIdToGoal[_goalId].additionalstakes.push(stake);
+            goalIdToStakeIds[_goalId].push(stakeId);
             // define stake in mapping
             stakeIdToStake[stakeId] = stake;
             // increment stakeId for future use
@@ -208,7 +206,7 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
             // push stakeId
             userToStakeIds[msg.sender].push(stakeId);
             // add stake to goal
-            goalIdToGoal[_goalId].additionalstakes.push(stake);
+            goalIdToStakeIds[_goalId].push(stakeId);
             // define stake in mapping
             stakeIdToStake[stakeId] = stake;
             // increment stakeId for future use
@@ -350,17 +348,21 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
         /* stakes will be transfered to user or to community wallet/back to stakers depending on this bool */ bool userAccomplishedGoal,
         uint256 _goalId
     ) internal {
-        // define goal in memory
-        Goal memory goal = goalIdToGoal[_goalId];
+        uint256[] memory stakeIds = goalIdToStakeIds[_goalId];
+        // transfer stake to user or wallet, depending on whether or not they achived their goal
         transferUserStake(userAccomplishedGoal, _goalId);
-        if (goal.additionalstakes.length > 0) {
+        if (stakeIds.length > 0) {
             if (userAccomplishedGoal) {
-                for (uint256 i; i < goal.additionalstakes.length; i++) {
-                    transferStakeToUser(goal.additionalstakes[i].stakeId);
+                for (uint256 i; i < stakeIds.length; i++) {
+                    transferStakeToUser(
+                        stakeIdToStake[goalIdToStakeIds[_goalId][i]].stakeId
+                    );
                 }
             } else {
-                for (uint256 i; i < goal.additionalstakes.length; i++) {
-                    transferStakeBackToStaker(goal.additionalstakes[i].stakeId);
+                for (uint256 i; i < stakeIds.length; i++) {
+                    transferStakeBackToStaker(
+                        stakeIdToStake[goalIdToStakeIds[_goalId][i]].stakeId
+                    );
                 }
             }
         }

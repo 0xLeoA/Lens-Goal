@@ -247,6 +247,7 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
             goalIdToGoal[_goalId].info.deadline
         )
     {
+        require(goalIdToGoal[_goalId].info.status == Status.PENDING);
         if (input == true) {
             goalIdToGoal[_goalId].votes.yes++;
         } else {
@@ -446,33 +447,81 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
             }
         }
     }
-    
-    // get lists of info of goals use can vote on
-    // used in front end to fetch all goals user can vote on
-    function getAllGoalInfoWithFollowingAddresses(
-        address[] memory following
+
+    // returns all goal infos user will be able to vote on which are pending (voting not opened)
+    function getPendingGoalInfoWithFriendAddresses(
+        address[] memory friends
     ) external view returns (GoalBasicInfo[] memory) {
-        // append all subjectable infos (status is pending)
-        GoalBasicInfo[] memory goalsInfo;
-        // iterate through all following accounts
-        for (uint256 i; i < following.length; i++) {
-            // get list of goalIds of friend
-            uint256[] memory followingGoalIds = userToGoalIds[following[i]];
-            if (followingGoalIds.length > 0) {
-                // iterate through all goalIds
-                for (uint256 j; j < followingGoalIds.length; j++) {
-                    Goal memory goal = goalIdToGoal[j];
-                    // if goal is pending and voting is open, add GoalBasicInfo to goalsInfo array
-                    if (
-                        goal.info.status == Status.PENDING &&
-                        block.timestamp > goal.info.deadline &&
-                        block.timestamp < goal.info.deadline + 1 days
-                    ) {
-                        goalsInfo[goalsInfo.length] = (goal.info);
-                    }
+        GoalBasicInfo[] memory infos;
+        for (uint256 friend; friend < friends.length; friend++) {
+            // get all goal ids of specific friend, then iterate through them
+            uint256[] memory friendGoalIds = userToGoalIds[friends[friend]];
+            // iterate through all friend goalIds
+            for (uint256 i; i < friendGoalIds.length; i++) {
+                uint256 _goalId = friendGoalIds[i];
+                GoalBasicInfo memory goalInfo = goalIdToGoal[_goalId].info;
+                // if goal is pending and voting has not opened, add goal info to infos array
+                if (
+                    goalInfo.status == Status.PENDING &&
+                    block.timestamp < goalInfo.deadline
+                ) {
+                    // add info to array (push method only works for storage object, so values must be added by index)
+                    infos[infos.length] = (goalIdToGoal[_goalId].info);
                 }
             }
         }
-        return (goalsInfo);
+        // return infos array
+        return infos;
+    }
+
+    // returns all goal infos user can vote on (voting opened)
+    function getOpenGoalInfoWithFriendAddresses(
+        address[] memory friends
+    ) external view returns (GoalBasicInfo[] memory) {
+        // info will be added here
+        GoalBasicInfo[] memory infos;
+        // iterate through all friends
+        for (uint256 friend; friend < friends.length; friend++) {
+            // get all goal ids of specific friend, then iterate through them
+            uint256[] memory friendGoalIds = userToGoalIds[friends[friend]];
+            for (uint256 i; i < friendGoalIds.length; i++) {
+                uint256 _goalId = friendGoalIds[i];
+                GoalBasicInfo memory goalInfo = goalIdToGoal[_goalId].info;
+                // if goal is pending and voting is open, add goal info to infos array
+                if (
+                    goalInfo.status == Status.PENDING &&
+                    block.timestamp > goalInfo.deadline
+                ) {
+                    // add info to array
+                    infos[infos.length] = (goalIdToGoal[_goalId].info);
+                }
+            }
+        }
+        // return infos array
+        return infos;
+    }
+
+    // returns all goal infos of expired goals (voting closed)
+    function getClosedGoalInfoWithFriendAddresses(
+        address[] memory friends
+    ) external view returns (GoalBasicInfo[] memory) {
+        // info will be added here
+        GoalBasicInfo[] memory infos;
+        // iterate through all friends
+        for (uint256 friend; friend < friends.length; friend++) {
+            // get all goal ids of specific friend, then iterate through them
+            uint256[] memory friendGoalIds = userToGoalIds[friends[friend]];
+            for (uint256 i; i < friendGoalIds.length; i++) {
+                uint256 _goalId = friendGoalIds[i];
+                GoalBasicInfo memory goalInfo = goalIdToGoal[_goalId].info;
+                // if goal is not pending , add goal info to infos array
+                if (goalInfo.status != Status.PENDING) {
+                    // add info to array
+                    infos[infos.length] = (goalIdToGoal[_goalId].info);
+                }
+            }
+        }
+        // return infos array
+        return infos;
     }
 }

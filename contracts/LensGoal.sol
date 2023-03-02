@@ -137,7 +137,6 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
                 "token transfer failed. check your approvals"
             );
             AdditionalStake[] memory additionalstakes;
-            string[] memory proofs;
             Goal memory goal = Goal(
                 // define info struct
                 GoalBasicInfo(
@@ -244,6 +243,8 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
         bool input
     )
         external
+        // only followers can vote. modifier code is in LensGoalHelpers.sol
+        isFollowingAddress(goalIdToGoal[_goalId].info.user, msg.sender)
         /** make sure voting windows is open */ windowOpen(
             goalIdToGoal[_goalId].info.deadline
         )

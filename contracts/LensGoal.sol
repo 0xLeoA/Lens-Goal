@@ -446,4 +446,33 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
             }
         }
     }
+    
+    // get lists of info of goals use can vote on
+    // used in front end to fetch all goals user can vote on
+    function getAllGoalInfoWithFollowingAddresses(
+        address[] memory following
+    ) external view returns (GoalBasicInfo[] memory) {
+        // append all subjectable infos (status is pending)
+        GoalBasicInfo[] memory goalsInfo;
+        // iterate through all following accounts
+        for (uint256 i; i < following.length; i++) {
+            // get list of goalIds of friend
+            uint256[] memory followingGoalIds = userToGoalIds[following[i]];
+            if (followingGoalIds.length > 0) {
+                // iterate through all goalIds
+                for (uint256 j; j < followingGoalIds.length; j++) {
+                    Goal memory goal = goalIdToGoal[j];
+                    // if goal is pending and voting is open, add GoalBasicInfo to goalsInfo array
+                    if (
+                        goal.info.status == Status.PENDING &&
+                        block.timestamp > goal.info.deadline &&
+                        block.timestamp < goal.info.deadline + 1 days
+                    ) {
+                        goalsInfo[goalsInfo.length] = (goal.info);
+                    }
+                }
+            }
+        }
+        return (goalsInfo);
+    }
 }

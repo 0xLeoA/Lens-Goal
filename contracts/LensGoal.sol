@@ -107,8 +107,8 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
             // why user can stake nothing:
             // so that user can have friends stake as "rewards" and themselves stake nothing
             AdditionalStake[] memory additionalstakes;
-            // *** No need to create goal here (because we're only using it once), we can just do that on line 129
-            Goal memory goal = Goal(
+            userToGoalIds[msg.sender].push(goalId);
+            goalIdToGoal[goalId] = Goal(
                 GoalBasicInfo(
                     msg.sender,
                     description,
@@ -123,8 +123,6 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
                 preProof,
                 ""
             );
-            userToGoalIds[msg.sender].push(goalId);
-            goalIdToGoal[goalId] = goal;
             // increment goalId for later goal instantiation
             goalId++;
         } else {

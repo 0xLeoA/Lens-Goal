@@ -473,9 +473,9 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
                     block.timestamp < goalInfo.deadline
                 ) {
                     // add info to address => pendingGoalInfo mapping
-                    addressToPendingFriendGoalInfos[user].push(
-                        goalIdToGoal[_goalId].info
-                    );
+                    addressToPendingFriendGoalInfos[user][
+                        addressToPendingFriendGoalInfos[user].length
+                    ] = goalIdToGoal[_goalId].info;
                 }
             }
         }
@@ -515,9 +515,9 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
                     block.timestamp > goalInfo.deadline
                 ) {
                     // add info to address => pendingGoalInfo mapping
-                    addressToOpenFriendGoalInfos[user].push(
-                        goalIdToGoal[_goalId].info
-                    );
+                    addressToOpenFriendGoalInfos[user][
+                        addressToOpenFriendGoalInfos[user].length
+                    ] = goalIdToGoal[_goalId].info;
                 }
             }
         }
@@ -554,9 +554,9 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
                 // if goal is pending and voting has not opened, add goal info to infos array
                 if (goalInfo.status != Status.PENDING) {
                     // add info to address => pendingGoalInfo mapping
-                    addressToClosedFriendGoalInfos[user].push(
-                        goalIdToGoal[_goalId].info
-                    );
+                    addressToClosedFriendGoalInfos[user][
+                        addressToClosedFriendGoalInfos[user].length
+                    ] = goalIdToGoal[_goalId].info;
                 }
             }
         }

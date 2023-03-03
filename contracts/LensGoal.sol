@@ -11,7 +11,7 @@
 
 // Team Lens Handles:
 // cryptocomical.lens       | Designer
-// (Add Greg's name here)   | Front-End and Smart Contract developer
+// grzegorz.lens            | Front-End and Smart Contract developer
 // leoawolanski.lens        | Smart Contract Developer
 
 pragma solidity 0.8.17;

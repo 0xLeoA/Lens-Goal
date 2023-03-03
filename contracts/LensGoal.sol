@@ -67,7 +67,6 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
         Votes votes;
         string preProof;
         string proof;
-        // when new stake is created it will be given this localStakeId. localStakeId will then be incremented
     }
 
     struct AdditionalStake {
@@ -481,98 +480,98 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
         }
     }
 
-    // get length of pending goal infos for user
-    // used in iteration in front end
-    function getPendingGoalInfoForAddressLength(
-        address friend
-    ) public view returns (uint256) {
-        return addressToPendingFriendGoalInfos[friend].length;
-    }
+    // used for front-end, returns list of goal info of friends of user
+    // if goalType = 0, function will return data for pending goals
+    // if goalType = 1, function will return data for open-voting goals
+    // if goalType = 2, function will return data for closed-voting goals
+    function getGoalInfoDataForUser(
+        address[] memory friends,
+        uint256 goalType
+    )
+        external
+        view
+        returns (
+            address[] memory _users,
+            string[] memory _descriptions,
+            string[] memory _verificationCriterias,
+            uint256[] memory _deadlines,
+            Status[] memory _statuses,
+            uint256[] memory _goalIds
+        )
+    {
+        address[] memory users;
+        string[] memory descriptions;
+        string[] memory verificationCriterias;
+        uint256[] memory deadlines;
+        Status[] memory statuses;
+        uint256[] memory goalIds;
 
-    // returns pending goal info of friend at given index
-    function getPendingGoalInfoForAddressAtIndex(
-        address friend,
-        uint256 index
-    ) external view returns (GoalBasicInfo memory) {
-        return addressToPendingFriendGoalInfos[friend][index];
-    }
-
-    // adds all pending open GoalInfo to user => openFriendGoalInfo mapping
-    function writeOpenGoalInfoWithFriendAddresses(
-        address user,
-        address[] memory friends
-    ) external {
         for (uint256 friend; friend < friends.length; friend++) {
             // get all goal ids of specific friend, then iterate through them
             uint256[] memory friendGoalIds = userToGoalIds[friends[friend]];
-            // iterate through all friend goalIds
             for (uint256 i; i < friendGoalIds.length; i++) {
                 uint256 _goalId = friendGoalIds[i];
                 GoalBasicInfo memory goalInfo = goalIdToGoal[_goalId].info;
-                // if goal is pending and voting has not opened, add goal info to infos array
-                if (
-                    goalInfo.status == Status.PENDING &&
-                    block.timestamp > goalInfo.deadline
-                ) {
-                    // add info to address => pendingGoalInfo mapping
-                    addressToOpenFriendGoalInfos[user][
-                        addressToOpenFriendGoalInfos[user].length
-                    ] = goalIdToGoal[_goalId].info;
+                // if goal type is pending, check if goal is pending
+                if (goalType == 0) {
+                    if (
+                        goalInfo.status == Status.PENDING &&
+                        block.timestamp < goalInfo.deadline
+                    ) {
+                        // if goal is pending, add all info to arrays
+                        users[users.length] == goalInfo.user;
+                        descriptions[descriptions.length] = goalInfo
+                            .description;
+                        verificationCriterias[
+                            verificationCriterias.length
+                        ] = goalInfo.verificationCriteria;
+                        deadlines[deadlines.length] = goalInfo.deadline;
+                        statuses[statuses.length] = goalInfo.status;
+                        goalIds[goalIds.length] = goalInfo.goalId;
+                    }
+                }
+                // if goal type is one, check if goal is open (open-voting)
+                else if (goalType == 1) {
+                    if (
+                        goalInfo.status == Status.PENDING &&
+                        block.timestamp > goalInfo.deadline
+                    ) {
+                        // if goal is open, add all info to arrays
+                        users[users.length] == goalInfo.user;
+                        descriptions[descriptions.length] = goalInfo
+                            .description;
+                        verificationCriterias[
+                            verificationCriterias.length
+                        ] = goalInfo.verificationCriteria;
+                        deadlines[deadlines.length] = goalInfo.deadline;
+                        statuses[statuses.length] = goalInfo.status;
+                        goalIds[goalIds.length] = goalInfo.goalId;
+                    }
+                }
+                // if goal type is two, check if goal is closed (closed voting)
+                else if (goalType == 2) {
+                    if (goalInfo.status != Status.PENDING) {
+                        // if goal is closed, add all info to arrays
+                        users[users.length] == goalInfo.user;
+                        descriptions[descriptions.length] = goalInfo
+                            .description;
+                        verificationCriterias[
+                            verificationCriterias.length
+                        ] = goalInfo.verificationCriteria;
+                        deadlines[deadlines.length] = goalInfo.deadline;
+                        statuses[statuses.length] = goalInfo.status;
+                        goalIds[goalIds.length] = goalInfo.goalId;
+                    }
                 }
             }
         }
-    }
-
-    // get length of open goal infos for user
-    // used in front-end for iteration
-    function getOpenGoalInfoForAddressLength(
-        address friend
-    ) public view returns (uint256) {
-        return addressToOpenFriendGoalInfos[friend].length;
-    }
-
-    // returns pending goal info of friend at given index
-    function getOpenGoalInfoForAddressAtIndex(
-        address friend,
-        uint256 index
-    ) external view returns (GoalBasicInfo memory) {
-        return addressToOpenFriendGoalInfos[friend][index];
-    }
-
-    // adds all pending open GoalInfo to user => openFriendGoalInfo mapping
-    function writeClosedGoalInfoWithFriendAddresses(
-        address user,
-        address[] memory friends
-    ) external {
-        for (uint256 friend; friend < friends.length; friend++) {
-            // get all goal ids of specific friend, then iterate through them
-            uint256[] memory friendGoalIds = userToGoalIds[friends[friend]];
-            // iterate through all friend goalIds
-            for (uint256 i; i < friendGoalIds.length; i++) {
-                uint256 _goalId = friendGoalIds[i];
-                GoalBasicInfo memory goalInfo = goalIdToGoal[_goalId].info;
-                // if goal is pending and voting has not opened, add goal info to infos array
-                if (goalInfo.status != Status.PENDING) {
-                    // add info to address => pendingGoalInfo mapping
-                    addressToClosedFriendGoalInfos[user][
-                        addressToClosedFriendGoalInfos[user].length
-                    ] = goalIdToGoal[_goalId].info;
-                }
-            }
-        }
-    }
-
-    function getClosedGoalInfoForAddressLength(
-        address friend
-    ) public view returns (uint256) {
-        return addressToClosedFriendGoalInfos[friend].length;
-    }
-
-    // returns closed goal info of friend at given index
-    function getClosedGoalInfoForAddressAtIndex(
-        address friend,
-        uint256 index
-    ) external view returns (GoalBasicInfo memory) {
-        return addressToClosedFriendGoalInfos[friend][index];
+        return (
+            users,
+            descriptions,
+            verificationCriterias,
+            deadlines,
+            statuses,
+            goalIds
+        );
     }
 }

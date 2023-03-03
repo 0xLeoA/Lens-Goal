@@ -1,3 +1,4 @@
+# Why we need Polygon
 Dear Polygon Judges, here is a no-bs explanation of why we believe Polygon is the best chain for our project. 
 
 To understand why we NEED Polygon, we first need to understand why Polygon was created. 

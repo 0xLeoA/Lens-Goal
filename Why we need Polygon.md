@@ -5,12 +5,13 @@ To understand why we NEED Polygon, we first need to understand why Polygon was c
 
 Polygon was created as a scaling solution for Ethereum. It was made to connect projects, DAOs, and users with its speedy and cheap blockchain.
 
-Our project needs fast and cheap. You see, our project copies the style of a Web2 website. Users send requets, upload data, and occasionally get something in return.
-We can't implement this on a normal L1. So we need an L2. 
+Our project needs fast and cheap. You see, our project copies the style of a Web2 website. Users send requets, upload data, and occasionally get data in return.
+We can't implement this on a normal, expensive, slow L1. So we need an L2. 
 
 # Why not another L2? 
 
 The existing Polygon userbase is more than any other chain. In the past year, there has been an average of about 2.5m daily txs on Polygon.
 On other L2s such as Arbitrum and Polygon, that average is about 225k and 400k (respectively).
 
-Our project requires a large userbase, and so we chose Polygon. 
+Our project requires a large userbase. 
+So we chose Polygon. 

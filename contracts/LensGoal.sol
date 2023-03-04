@@ -215,6 +215,19 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
         }
     }
 
+    // used in frontend
+    function getGoalByGoalId(
+        uint256 _goalId
+    ) public view returns (Goal memory) {
+        return goalIdToGoal[_goalId];
+    }
+
+    function getStakeByStakeId(
+        uint256 _stakeId
+    ) public view returns (AdditionalStake memory) {
+        return stakeIdToStake[_stakeId];
+    }
+
     // quickly get a Stake struct where token is ether
     function defaultEtherStake() internal view returns (Stake memory) {
         return Stake(TokenType.ETHER, msg.value, address(0));
@@ -526,4 +539,9 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
         }
     }
 
+    // used for front-end, returns list of goal info of friends of user
+    // if goalType = 0, function will return data for pending goals
+    // if goalType = 1, function will return data for open-voting goals
+    // if goalType = 2, function will return data for closed-voting goals
 }
+

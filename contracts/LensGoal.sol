@@ -89,16 +89,47 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
     mapping(uint256 => AdditionalStake) public stakeIdToStake;
     // maps goal to all stakeId of stakes for that goal
     mapping(uint256 => uint256[]) goalIdToStakeIds;
-    // maps address to goals user will be able to vote on (pending)
-    mapping(address => GoalBasicInfo[]) public addressToPendingFriendGoalInfos;
-    // maps address to goals user can vote on (voting open)
-    mapping(address => GoalBasicInfo[]) public addressToOpenFriendGoalInfos;
-    // maps address to goals user can't vote on (voting closed)
-    mapping(address => GoalBasicInfo[]) public addressToClosedFriendGoalInfos;
 
     // will be incremented when new goals/stakes are published
     uint256 goalId;
     uint256 stakeId;
+
+    // events
+
+    event GoalCreated(
+        address indexed _user,
+        string _description,
+        string _verificationCriteria,
+        uint256 _deadline,
+        Status _status,
+        uint256 indexed _goalId
+    );
+
+    event AdditionalStakeCreated(
+        address indexed _staker,
+        TokenType _tokenType,
+        uint256 _amount,
+        address _tokenAddress,
+        uint256 indexed _stakeId,
+        uint256 indexed _goalId
+    );
+
+    event StakeWithdrawn(
+        TokenType _tokenType,
+        uint256 _amount,
+        address _tokenAddress,
+        uint256 indexed _stakeId,
+        uint256 indexed _goalId,
+        address indexed _staker
+    );
+
+    event ProofAdded(
+        address indexed _user,
+        string _proof,
+        uint256 indexed _goalId
+    );
+
+    event VoteCasted(address indexed _voter, bool _vote, uint256 _goalId);
 
     // allows user to make a new goal
     function makeNewGoal(
@@ -128,6 +159,14 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
                 Votes(0, 0),
                 preProof,
                 ""
+            );
+            emit GoalCreated(
+                msg.sender,
+                description,
+                verificationCriteria,
+                timestampEnd,
+                Status.PENDING,
+                goalId
             );
             // increment goalId for later goal instantiation
             goalId++;
@@ -163,6 +202,14 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
             userToGoalIds[msg.sender].push(goalId);
             // define goalId
             goalIdToGoal[goalId] = goal;
+            emit GoalCreated(
+                msg.sender,
+                description,
+                verificationCriteria,
+                timestampEnd,
+                Status.PENDING,
+                goalId
+            );
             // increment goalId (for future use)
             goalId++;
         }
@@ -196,6 +243,14 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
             goalIdToStakeIds[_goalId].push(stakeId);
             // define stake in mapping
             stakeIdToStake[stakeId] = stake;
+            emit AdditionalStakeCreated(
+                msg.sender,
+                TokenType.ETHER,
+                msg.value,
+                address(0),
+                stakeId,
+                _goalId
+            );
             // increment stakeId for future use
             stakeId++;
         } else {
@@ -214,6 +269,14 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
             goalIdToStakeIds[_goalId].push(stakeId);
             // define stake in mapping
             stakeIdToStake[stakeId] = stake;
+            emit AdditionalStakeCreated(
+                msg.sender,
+                TokenType.ERC20,
+                tokenAmount,
+                tokenAddress,
+                stakeId,
+                _goalId
+            );
             // increment stakeId for future use
             stakeId++;
         }
@@ -231,6 +294,7 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
         );
         // update proof
         goalIdToGoal[_goalId].proof = proof;
+        emit ProofAdded(msg.sender, proof, _goalId);
     }
 
     // get info of goal (for front end)
@@ -258,6 +322,7 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
         } else {
             goalIdToGoal[_goalId].votes.no++;
         }
+        emit VoteCasted(msg.sender, input, _goalId);
     }
 
     // checks if voting window is open
@@ -288,6 +353,14 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
                 stake.stake.amount
             );
         }
+        emit StakeWithdrawn(
+            stake.stake.tokenType,
+            stake.stake.amount,
+            stake.stake.tokenAddress,
+            stake.stakeId,
+            stake.goalId,
+            stake.staker
+        );
     }
 
     function votingWindowClosedAndStatusIsPending(
@@ -453,125 +526,4 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface {
         }
     }
 
-    // adds all pending friend GoalInfo to user => pendingFriendGoalInfo mapping
-    // *** USE READ FUNCTIONS BELOW TO GET DATA ***
-    function writePendingGoalInfoWithFriendAddresses(
-        address user,
-        address[] memory friends
-    ) external {
-        for (uint256 friend; friend < friends.length; friend++) {
-            // get all goal ids of specific friend, then iterate through them
-            uint256[] memory friendGoalIds = userToGoalIds[friends[friend]];
-            // iterate through all friend goalIds
-            for (uint256 i; i < friendGoalIds.length; i++) {
-                uint256 _goalId = friendGoalIds[i];
-                GoalBasicInfo memory goalInfo = goalIdToGoal[_goalId].info;
-                // if goal is pending and voting has not opened, add goal info to infos array
-                if (
-                    goalInfo.status == Status.PENDING &&
-                    block.timestamp < goalInfo.deadline
-                ) {
-                    // add info to address => pendingGoalInfo mapping
-                    addressToPendingFriendGoalInfos[user][
-                        addressToPendingFriendGoalInfos[user].length
-                    ] = goalIdToGoal[_goalId].info;
-                }
-            }
-        }
-    }
-
-    // used for front-end, returns list of goal info of friends of user
-    // if goalType = 0, function will return data for pending goals
-    // if goalType = 1, function will return data for open-voting goals
-    // if goalType = 2, function will return data for closed-voting goals
-    function getGoalInfoDataForUser(
-        address[] memory friends,
-        uint256 goalType
-    )
-        external
-        view
-        returns (
-            address[] memory _users,
-            string[] memory _descriptions,
-            string[] memory _verificationCriterias,
-            uint256[] memory _deadlines,
-            Status[] memory _statuses,
-            uint256[] memory _goalIds
-        )
-    {
-        address[] memory users;
-        string[] memory descriptions;
-        string[] memory verificationCriterias;
-        uint256[] memory deadlines;
-        Status[] memory statuses;
-        uint256[] memory goalIds;
-
-        for (uint256 friend; friend < friends.length; friend++) {
-            // get all goal ids of specific friend, then iterate through them
-            uint256[] memory friendGoalIds = userToGoalIds[friends[friend]];
-            for (uint256 i; i < friendGoalIds.length; i++) {
-                uint256 _goalId = friendGoalIds[i];
-                GoalBasicInfo memory goalInfo = goalIdToGoal[_goalId].info;
-                // if goal type is pending, check if goal is pending
-                if (goalType == 0) {
-                    if (
-                        goalInfo.status == Status.PENDING &&
-                        block.timestamp < goalInfo.deadline
-                    ) {
-                        // if goal is pending, add all info to arrays
-                        users[users.length] == goalInfo.user;
-                        descriptions[descriptions.length] = goalInfo
-                            .description;
-                        verificationCriterias[
-                            verificationCriterias.length
-                        ] = goalInfo.verificationCriteria;
-                        deadlines[deadlines.length] = goalInfo.deadline;
-                        statuses[statuses.length] = goalInfo.status;
-                        goalIds[goalIds.length] = goalInfo.goalId;
-                    }
-                }
-                // if goal type is one, check if goal is open (open-voting)
-                else if (goalType == 1) {
-                    if (
-                        goalInfo.status == Status.PENDING &&
-                        block.timestamp > goalInfo.deadline
-                    ) {
-                        // if goal is open, add all info to arrays
-                        users[users.length] == goalInfo.user;
-                        descriptions[descriptions.length] = goalInfo
-                            .description;
-                        verificationCriterias[
-                            verificationCriterias.length
-                        ] = goalInfo.verificationCriteria;
-                        deadlines[deadlines.length] = goalInfo.deadline;
-                        statuses[statuses.length] = goalInfo.status;
-                        goalIds[goalIds.length] = goalInfo.goalId;
-                    }
-                }
-                // if goal type is two, check if goal is closed (closed voting)
-                else if (goalType == 2) {
-                    if (goalInfo.status != Status.PENDING) {
-                        // if goal is closed, add all info to arrays
-                        users[users.length] == goalInfo.user;
-                        descriptions[descriptions.length] = goalInfo
-                            .description;
-                        verificationCriterias[
-                            verificationCriterias.length
-                        ] = goalInfo.verificationCriteria;
-                        deadlines[deadlines.length] = goalInfo.deadline;
-                        statuses[statuses.length] = goalInfo.status;
-                        goalIds[goalIds.length] = goalInfo.goalId;
-                    }
-                }
-            }
-        }
-        return (
-            users,
-            descriptions,
-            verificationCriterias,
-            deadlines,
-            statuses,
-            goalIds
-        );
-    }
 }

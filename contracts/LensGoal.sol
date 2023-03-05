@@ -35,9 +35,29 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface{
     address clFunctionsConsumerAddress; 
     // only these addresses may call certain functions 
     address[] owners = [0x2cF29308548E6E15056FA0C8dE1fd7087053e5Ae, 0x327def07a8e64E001E23a96E90955eDC091Ee066, 0x74B4B8C7cb9A594a6440965f982deF10BB9570b9];
+    mapping(address => bool) isAddressOwner; 
+    address[] charities = [0x8718122A0c268ef5efeA7771E0e6217913fC0807, 0x10E1439455BD2624878b243819E31CfEE9eb721C, 0xB6989F472Bef8931e6Ca882b1f875539b7D5DA19];
+    // used to identify which charity the funds are sent to 
+    struct Charity {
+        string name;
+        address charityAddress;
+        bool isValid;
+    }
+    mapping(address => Charity) addressToCharity;
+
+    constructor() {
+        // define owner mapping
+        isAddressOwner[owners[0]] = true;
+        isAddressOwner[owners[1]] = true;
+        isAddressOwner[owners[2]] = true;
+        // define charities 
+        addressToCharity[charities[0]] = Charity("Save the Children", charities[0], true);
+        addressToCharity[charities[1]] = Charity("Unchain Ukraine", charities[1], true);
+        addressToCharity[charities[2]] = Charity("Giveth House", charities[2], true);
+    }
 
     modifier onlyOwners() {
-        require(msg.sender == owners[0] || msg.sender == owners[1] || msg.sender==owners[2]);
+        require(isAddressOwner[msg.sender] == true);
         _;
     }
 
@@ -83,6 +103,7 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface{
         uint256 deadline;
         Status status;
         uint256 goalId;
+        Charity charity;
     }
 
     struct Goal {
@@ -162,8 +183,11 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface{
         uint256 tokenAmount,
         address tokenAddress,
         uint256 timestampEnd,
-        string memory preProof
+        string memory preProof, 
+        address charityAddress
     ) external payable {
+        // make sure charity is valid
+        require(addressToCharity[charityAddress].isValid == true);
         if (inEther) {
             // require(msg.value > 0, "msg.value must be greater than 0");
             // why user can stake nothing:
@@ -176,7 +200,7 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface{
                     verificationCriteria,
                     timestampEnd,
                     Status.PENDING,
-                    goalId
+                    goalId, addressToCharity[charityAddress]
                 ),
                 defaultEtherStake(),
                 Votes(0, 0),
@@ -212,7 +236,8 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface{
                     verificationCriteria,
                     timestampEnd,
                     Status.PENDING,
-                    goalId
+                    goalId,
+                    addressToCharity[charityAddress]
                 ),
                 // get etherstake struct
                 defaultEtherStake(),
@@ -550,14 +575,16 @@ contract LensGoal is LensGoalHelpers, AutomationCompatibleInterface{
         } else {
             // if stake is in ether, transfer ether to community wallet
             if (goal.stake.tokenType == TokenType.ETHER) {
-                payable(communityWallet).transfer(goal.stake.amount);
+                payable(communityWallet).transfer((goal.stake.amount)/2);
+                payable(goal.info.charity.charityAddress).transfer((goal.stake.amount)/2);
             }
             // if stake is in erc20, transfer tokens to community wallet
             else {
                 IERC20(goal.stake.tokenAddress).transfer(
                     communityWallet,
-                    goal.stake.amount
+                    (goal.stake.amount)/2
                 );
+                IERC20(goal.stake.tokenAddress).transfer(goal.info.charity.charityAddress, (goal.stake.amount)/2);
             }
         }
     }
